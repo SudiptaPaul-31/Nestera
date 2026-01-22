@@ -1,6 +1,3 @@
-use soroban_sdk::contracttype;
-
-
 use soroban_sdk::{contracttype, Address, Symbol};
 
 /// Represents the different types of savings plans available in Nestera
@@ -29,7 +26,6 @@ pub struct SavingsPlan {
 }
 
 /// Represents a user's aggregated savings information
-#[derive(Clone)]
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct User {
