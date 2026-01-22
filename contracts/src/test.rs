@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use super::*;
-use soroban_sdk::{symbol_short, testutils::Address as _, Address, Env};
+use soroban_sdk::{symbol_short, testutils::{Address as _, Ledger}, Address, Env};
 
 #[test]
 fn test_user_instantiation() {
@@ -25,6 +25,7 @@ fn test_flexi_savings_plan() {
         last_withdraw: 0,
         interest_rate: 500, // 5.00% APY
         is_completed: false,
+        is_withdrawn: false,
     };
     
     assert_eq!(plan.plan_id, 1);
@@ -45,6 +46,7 @@ fn test_lock_savings_plan() {
         last_withdraw: 0,
         interest_rate: 800,
         is_completed: false,
+        is_withdrawn: false,
     };
     
     assert_eq!(plan.plan_id, 2);
@@ -69,6 +71,7 @@ fn test_goal_savings_plan() {
         last_withdraw: 0,
         interest_rate: 600,
         is_completed: false,
+        is_withdrawn: false,
     };
     
     assert_eq!(plan.plan_id, 3);
@@ -98,6 +101,7 @@ fn test_group_savings_plan() {
         last_withdraw: 0,
         interest_rate: 700,
         is_completed: false,
+        is_withdrawn: false,
     };
     
     assert_eq!(plan.plan_id, 4);
@@ -178,6 +182,7 @@ fn test_xdr_compatibility_savings_plan() {
         last_withdraw: 1050000,
         interest_rate: 550,
         is_completed: false,
+        is_withdrawn: false,
     };
     
     let key = symbol_short!("testplan");
@@ -204,6 +209,7 @@ fn test_xdr_compatibility_all_plan_types() {
             last_withdraw: 0,
             interest_rate: 500,
             is_completed: false,
+            is_withdrawn: false,
         };
         env.storage().instance().set(&0u32, &flexi_plan);
         let retrieved: SavingsPlan = env.storage().instance().get(&0u32).unwrap();
@@ -219,6 +225,7 @@ fn test_xdr_compatibility_all_plan_types() {
             last_withdraw: 0,
             interest_rate: 500,
             is_completed: false,
+            is_withdrawn: false,
         };
         env.storage().instance().set(&1u32, &lock_plan);
         let retrieved: SavingsPlan = env.storage().instance().get(&1u32).unwrap();
@@ -238,6 +245,7 @@ fn test_xdr_compatibility_all_plan_types() {
             last_withdraw: 0,
             interest_rate: 500,
             is_completed: false,
+            is_withdrawn: false,
         };
         env.storage().instance().set(&2u32, &goal_plan);
         let retrieved: SavingsPlan = env.storage().instance().get(&2u32).unwrap();
@@ -258,6 +266,7 @@ fn test_xdr_compatibility_all_plan_types() {
             last_withdraw: 0,
             interest_rate: 500,
             is_completed: false,
+            is_withdrawn: false,
         };
         env.storage().instance().set(&3u32, &group_plan);
         let retrieved: SavingsPlan = env.storage().instance().get(&3u32).unwrap();
@@ -280,6 +289,7 @@ fn test_completed_plan() {
         last_withdraw: 0,
         interest_rate: 650,
         is_completed: true,
+        is_withdrawn: false,
     };
     
     assert!(plan.is_completed);
@@ -309,3 +319,316 @@ fn test_plan_type_patterns() {
         assert_eq!(amount, 5_000_000);
     }
 }
+
+// ========== Lock Save Withdrawal Tests ==========
+
+#[test]
+fn test_withdraw_lock_save_success() {
+    let env = Env::default();
+    env.mock_all_auths();
+    
+    let contract_id = env.register(NesteraContract, ());
+    let client = NesteraContractClient::new(&env, &contract_id);
+    
+    let user_addr = Address::generate(&env);
+    let plan_id = 1u64;
+    
+    // Set up user data
+    let user = User {
+        total_balance: 1_000_000,
+        savings_count: 1,
+    };
+    let user_key = DataKey::User(user_addr.clone());
+    env.as_contract(&contract_id, || {
+        env.storage().persistent().set(&user_key, &user);
+    });
+    
+    // Set up lock savings plan with maturity time in the past
+    let maturity_time = 1000000u64;
+    let lock_plan = SavingsPlan {
+        plan_id,
+        plan_type: PlanType::Lock(maturity_time),
+        balance: 500_000,
+        start_time: 900000,
+        last_deposit: 900000,
+        last_withdraw: 0,
+        interest_rate: 800,
+        is_completed: false,
+        is_withdrawn: false,
+    };
+    let plan_key = DataKey::SavingsPlan(user_addr.clone(), plan_id);
+    env.as_contract(&contract_id, || {
+        env.storage().persistent().set(&plan_key, &lock_plan);
+    });
+    
+    // Set ledger timestamp to after maturity
+    env.ledger().with_mut(|li| {
+        li.timestamp = maturity_time + 100;
+    });
+    
+    // Perform withdrawal
+    let withdrawn = client.withdraw_lock_save(&user_addr, &plan_id);
+    assert_eq!(withdrawn, 500_000);
+    
+    // Verify plan is marked as withdrawn
+    env.as_contract(&contract_id, || {
+        let updated_plan: SavingsPlan = env.storage().persistent().get(&plan_key).unwrap();
+        assert!(updated_plan.is_withdrawn);
+        assert_eq!(updated_plan.balance, 0);
+        assert!(updated_plan.is_completed);
+        assert_eq!(updated_plan.last_withdraw, maturity_time + 100);
+    });
+    
+    // Verify user balance is updated
+    env.as_contract(&contract_id, || {
+        let updated_user: User = env.storage().persistent().get(&user_key).unwrap();
+        assert_eq!(updated_user.total_balance, 500_000);
+    });
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #4)")]
+fn test_withdraw_lock_save_not_matured() {
+    let env = Env::default();
+    env.mock_all_auths();
+    
+    let contract_id = env.register(NesteraContract, ());
+    let client = NesteraContractClient::new(&env, &contract_id);
+    
+    let user_addr = Address::generate(&env);
+    let plan_id = 1u64;
+    
+    // Set up user data
+    let user = User {
+        total_balance: 1_000_000,
+        savings_count: 1,
+    };
+    let user_key = DataKey::User(user_addr.clone());
+    env.as_contract(&contract_id, || {
+        env.storage().persistent().set(&user_key, &user);
+    });
+    
+    // Set up lock savings plan with maturity time in the future
+    let maturity_time = 2000000u64;
+    let lock_plan = SavingsPlan {
+        plan_id,
+        plan_type: PlanType::Lock(maturity_time),
+        balance: 500_000,
+        start_time: 1000000,
+        last_deposit: 1000000,
+        last_withdraw: 0,
+        interest_rate: 800,
+        is_completed: false,
+        is_withdrawn: false,
+    };
+    let plan_key = DataKey::SavingsPlan(user_addr.clone(), plan_id);
+    env.as_contract(&contract_id, || {
+        env.storage().persistent().set(&plan_key, &lock_plan);
+    });
+    
+    // Set ledger timestamp to before maturity
+    env.ledger().with_mut(|li| {
+        li.timestamp = maturity_time - 100;
+    });
+    
+    // This should panic with LockNotMatured error (error code 4)
+    client.withdraw_lock_save(&user_addr, &plan_id);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #5)")]
+fn test_withdraw_lock_save_already_withdrawn() {
+    let env = Env::default();
+    env.mock_all_auths();
+    
+    let contract_id = env.register(NesteraContract, ());
+    let client = NesteraContractClient::new(&env, &contract_id);
+    
+    let user_addr = Address::generate(&env);
+    let plan_id = 1u64;
+    
+    // Set up user data
+    let user = User {
+        total_balance: 500_000,
+        savings_count: 1,
+    };
+    let user_key = DataKey::User(user_addr.clone());
+    env.as_contract(&contract_id, || {
+        env.storage().persistent().set(&user_key, &user);
+    });
+    
+    // Set up lock savings plan that's already been withdrawn
+    let maturity_time = 1000000u64;
+    let lock_plan = SavingsPlan {
+        plan_id,
+        plan_type: PlanType::Lock(maturity_time),
+        balance: 0,
+        start_time: 900000,
+        last_deposit: 900000,
+        last_withdraw: 1000100,
+        interest_rate: 800,
+        is_completed: true,
+        is_withdrawn: true,
+    };
+    let plan_key = DataKey::SavingsPlan(user_addr.clone(), plan_id);
+    env.as_contract(&contract_id, || {
+        env.storage().persistent().set(&plan_key, &lock_plan);
+    });
+    
+    // Set ledger timestamp to after maturity
+    env.ledger().with_mut(|li| {
+        li.timestamp = maturity_time + 200;
+    });
+    
+    // This should panic with AlreadyWithdrawn error (error code 5)
+    client.withdraw_lock_save(&user_addr, &plan_id);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1)")]
+fn test_withdraw_lock_save_user_not_found() {
+    let env = Env::default();
+    env.mock_all_auths();
+    
+    let contract_id = env.register(NesteraContract, ());
+    let client = NesteraContractClient::new(&env, &contract_id);
+    
+    let user_addr = Address::generate(&env);
+    let plan_id = 1u64;
+    
+    // Don't set up any user data - user doesn't exist
+    
+    // This should panic with UserNotFound error (error code 1)
+    client.withdraw_lock_save(&user_addr, &plan_id);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #2)")]
+fn test_withdraw_lock_save_plan_not_found() {
+    let env = Env::default();
+    env.mock_all_auths();
+    
+    let contract_id = env.register(NesteraContract, ());
+    let client = NesteraContractClient::new(&env, &contract_id);
+    
+    let user_addr = Address::generate(&env);
+    let plan_id = 1u64;
+    
+    // Set up user data
+    let user = User {
+        total_balance: 1_000_000,
+        savings_count: 0,
+    };
+    let user_key = DataKey::User(user_addr.clone());
+    env.as_contract(&contract_id, || {
+        env.storage().persistent().set(&user_key, &user);
+    });
+    
+    // Don't set up any plan - plan doesn't exist
+    
+    // This should panic with PlanNotFound error (error code 2)
+    client.withdraw_lock_save(&user_addr, &plan_id);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #2)")]
+fn test_withdraw_lock_save_wrong_plan_type() {
+    let env = Env::default();
+    env.mock_all_auths();
+    
+    let contract_id = env.register(NesteraContract, ());
+    let client = NesteraContractClient::new(&env, &contract_id);
+    
+    let user_addr = Address::generate(&env);
+    let plan_id = 1u64;
+    
+    // Set up user data
+    let user = User {
+        total_balance: 1_000_000,
+        savings_count: 1,
+    };
+    let user_key = DataKey::User(user_addr.clone());
+    env.as_contract(&contract_id, || {
+        env.storage().persistent().set(&user_key, &user);
+    });
+    
+    // Set up a Flexi plan instead of Lock plan
+    let flexi_plan = SavingsPlan {
+        plan_id,
+        plan_type: PlanType::Flexi,
+        balance: 500_000,
+        start_time: 1000000,
+        last_deposit: 1000000,
+        last_withdraw: 0,
+        interest_rate: 500,
+        is_completed: false,
+        is_withdrawn: false,
+    };
+    let plan_key = DataKey::SavingsPlan(user_addr.clone(), plan_id);
+    env.as_contract(&contract_id, || {
+        env.storage().persistent().set(&plan_key, &flexi_plan);
+    });
+    
+    // This should panic with PlanNotFound error (error code 2)
+    // because it's not a Lock plan
+    client.withdraw_lock_save(&user_addr, &plan_id);
+}
+
+#[test]
+fn test_withdraw_lock_save_balance_update() {
+    let env = Env::default();
+    env.mock_all_auths();
+    
+    let contract_id = env.register(NesteraContract, ());
+    let client = NesteraContractClient::new(&env, &contract_id);
+    
+    let user_addr = Address::generate(&env);
+    let plan_id = 1u64;
+    
+    // Set up user with multiple savings
+    let initial_balance = 2_000_000i128;
+    let lock_balance = 750_000i128;
+    let user = User {
+        total_balance: initial_balance,
+        savings_count: 2,
+    };
+    let user_key = DataKey::User(user_addr.clone());
+    env.as_contract(&contract_id, || {
+        env.storage().persistent().set(&user_key, &user);
+    });
+    
+    // Set up lock savings plan
+    let maturity_time = 1000000u64;
+    let lock_plan = SavingsPlan {
+        plan_id,
+        plan_type: PlanType::Lock(maturity_time),
+        balance: lock_balance,
+        start_time: 900000,
+        last_deposit: 900000,
+        last_withdraw: 0,
+        interest_rate: 800,
+        is_completed: false,
+        is_withdrawn: false,
+    };
+    let plan_key = DataKey::SavingsPlan(user_addr.clone(), plan_id);
+    env.as_contract(&contract_id, || {
+        env.storage().persistent().set(&plan_key, &lock_plan);
+    });
+    
+    // Set ledger timestamp to after maturity
+    env.ledger().with_mut(|li| {
+        li.timestamp = maturity_time + 100;
+    });
+    
+    // Perform withdrawal
+    let withdrawn = client.withdraw_lock_save(&user_addr, &plan_id);
+    assert_eq!(withdrawn, lock_balance);
+    
+    // Verify user balance is correctly decremented
+    env.as_contract(&contract_id, || {
+        let updated_user: User = env.storage().persistent().get(&user_key).unwrap();
+        assert_eq!(updated_user.total_balance, initial_balance - lock_balance);
+        assert_eq!(updated_user.total_balance, 1_250_000);
+    });
+}
+

@@ -1,4 +1,17 @@
-use soroban_sdk::{contracttype, Address, Symbol};
+use soroban_sdk::{contracttype, contracterror, Address, Symbol};
+
+/// Error codes for the Nestera savings contract
+#[contracterror]
+#[derive(Clone, Debug, Copy, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum SavingsError {
+    UserNotFound = 1,
+    PlanNotFound = 2,
+    Unauthorized = 3,
+    LockNotMatured = 4,
+    AlreadyWithdrawn = 5,
+    InsufficientBalance = 6,
+}
 
 /// Represents the different types of savings plans available in Nestera
 #[contracttype]
@@ -23,6 +36,7 @@ pub struct SavingsPlan {
     /// Annual Percentage Yield (APY) as an integer (e.g., 500 = 5.00%)
     pub interest_rate: u32,
     pub is_completed: bool,
+    pub is_withdrawn: bool,
 }
 
 /// Represents a user's aggregated savings information
