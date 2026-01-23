@@ -39,13 +39,7 @@ pub struct SavingsPlan {
     pub is_withdrawn: bool,
 }
 
-/// Represents a user's aggregated savings information
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct User {
-    pub total_balance: i128,
-    pub savings_count: u32,
-}
+
 
 /// Storage keys for the contract's persistent data
 #[contracttype]

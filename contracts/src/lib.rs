@@ -255,6 +255,21 @@ impl NesteraContract {
     pub fn get_user(env: Env, user: Address) -> Option<User> {
         env.storage().persistent().get(&DataKey::User(user))
     }
+
+    /// Initialize a new user in the savings contract
+    pub fn initialize_user(env: Env, user: Address) -> Result<(), SavingsError> {
+        users::initialize_user(&env, user)
+    }
+
+    /// Check if a user exists in the contract
+    pub fn user_exists(env: Env, user: Address) -> bool {
+        users::user_exists(&env, &user)
+    }
+
+    /// Get user data from the contract
+    pub fn get_user(env: Env, user: Address) -> Result<User, SavingsError> {
+        users::get_user(&env, &user)
+    }
 }
 
 #[cfg(test)]
