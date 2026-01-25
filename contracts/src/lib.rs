@@ -2,6 +2,7 @@
 #![allow(non_snake_case)]
 mod flexi;
 mod group;
+mod lock;
 mod storage_types;
 mod users;
 
@@ -11,7 +12,7 @@ use soroban_sdk::{
     contract, contractimpl, panic_with_error, symbol_short, xdr::ToXdr, Address, Bytes, BytesN,
     Env, Symbol, Vec,
 };
-pub use storage_types::{DataKey, GroupSave, MintPayload, PlanType, SavingsPlan};
+pub use storage_types::{DataKey, GroupSave, LockSave, MintPayload, PlanType, SavingsPlan};
 
 /// Custom error codes for the contract
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -375,6 +376,78 @@ impl NesteraContract {
     /// A vector of group IDs the user is involved in
     pub fn get_user_groups(env: Env, user: Address) -> Vec<u64> {
         group::get_user_groups(&env, &user)
+    // ========== Lock Save Functions ==========
+
+    /// Creates a new Lock Save plan for a user
+    ///
+    /// # Arguments
+    /// * `env` - The contract environment
+    /// * `user` - The address of the user creating the lock save
+    /// * `amount` - The amount to lock (must be positive)
+    /// * `duration` - The lock duration in seconds (must be positive)
+    ///
+    /// # Returns
+    /// The unique lock save ID
+    ///
+    /// # Panics
+    /// Panics on validation errors or if user doesn't exist
+    pub fn create_lock_save(env: Env, user: Address, amount: i128, duration: u64) -> u64 {
+        lock::create_lock_save(&env, user, amount, duration)
+            .unwrap_or_else(|e| panic_with_error!(&env, e))
+    }
+
+    /// Checks if a lock save plan has matured
+    ///
+    /// # Arguments
+    /// * `env` - The contract environment
+    /// * `lock_id` - The ID of the lock save to check
+    ///
+    /// # Returns
+    /// `true` if the lock save has matured, `false` otherwise
+    pub fn check_matured_lock(env: Env, lock_id: u64) -> bool {
+        lock::check_matured_lock(&env, lock_id)
+    }
+
+    /// Retrieves a lock save by ID
+    ///
+    /// # Arguments
+    /// * `env` - The contract environment
+    /// * `lock_id` - The ID of the lock save to retrieve
+    ///
+    /// # Returns
+    /// The LockSave struct if found, panics if not found
+    pub fn get_lock_save(env: Env, lock_id: u64) -> LockSave {
+        lock::get_lock_save(&env, lock_id)
+            .unwrap_or_else(|| panic_with_error!(&env, SavingsError::PlanNotFound))
+    }
+
+    /// Retrieves all lock save IDs for a user
+    ///
+    /// # Arguments
+    /// * `env` - The contract environment
+    /// * `user` - The user's address
+    ///
+    /// # Returns
+    /// Vector of lock save IDs owned by the user
+    pub fn get_user_lock_saves(env: Env, user: Address) -> Vec<u64> {
+        lock::get_user_lock_saves(&env, &user)
+    }
+
+    /// Withdraws from a matured lock save plan
+    ///
+    /// # Arguments
+    /// * `env` - The contract environment
+    /// * `user` - The user attempting to withdraw
+    /// * `lock_id` - The ID of the lock save to withdraw from
+    ///
+    /// # Returns
+    /// The amount withdrawn (including interest)
+    ///
+    /// # Panics
+    /// Panics if withdrawal conditions are not met
+    pub fn withdraw_lock_save(env: Env, user: Address, lock_id: u64) -> i128 {
+        lock::withdraw_lock_save(&env, user, lock_id)
+            .unwrap_or_else(|e| panic_with_error!(&env, e))
     }
 }
 
