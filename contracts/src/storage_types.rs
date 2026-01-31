@@ -164,6 +164,12 @@ pub enum DataKey {
     UserAutoSaves(Address),
     /// Stores the next auto-incrementing AutoSave schedule ID
     NextAutoSaveId,
+    // Interest Rates
+    FlexiRate,
+    GoalRate,
+    GroupRate,
+    /// Maps duration (days) to interest rate
+    LockRate(u64),
 }
 
 /// Payload structure that the admin signs off-chain

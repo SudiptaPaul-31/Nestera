@@ -13,6 +13,8 @@ mod group;
 mod lock;
 mod storage_types;
 mod users;
+
+mod rates;
 mod views;
 
 pub use crate::errors::SavingsError;
@@ -308,6 +310,31 @@ impl NesteraContract {
         Ok(())
     }
 
+    pub fn set_flexi_rate(env: Env, rate: i128) -> Result<(), SavingsError> {
+        let admin = env.storage().instance().get(&DataKey::Admin).unwrap();
+        let admin_address: Address = admin; // Type casting for clarity, though get returns generic
+        admin_address.require_auth();
+        rates::set_flexi_rate(&env, rate)
+    }
+
+    pub fn set_goal_rate(env: Env, rate: i128) -> Result<(), SavingsError> {
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        admin.require_auth();
+        rates::set_goal_rate(&env, rate)
+    }
+
+    pub fn set_group_rate(env: Env, rate: i128) -> Result<(), SavingsError> {
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        admin.require_auth();
+        rates::set_group_rate(&env, rate)
+    }
+
+    pub fn set_lock_rate(env: Env, duration_days: u64, rate: i128) -> Result<(), SavingsError> {
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        admin.require_auth();
+        rates::set_lock_rate(&env, duration_days, rate)
+    }
+
     pub fn pause(env: Env, admin: Address) -> Result<(), SavingsError> {
         admin.require_auth();
         let stored_admin: Option<Address> = env.storage().instance().get(&DataKey::Admin);
@@ -350,6 +377,22 @@ impl NesteraContract {
             .unwrap_or(false)
     }
 
+    pub fn get_flexi_rate(env: Env) -> i128 {
+        rates::get_flexi_rate(&env)
+    }
+
+    pub fn get_goal_rate(env: Env) -> i128 {
+        rates::get_goal_rate(&env)
+    }
+
+    pub fn get_group_rate(env: Env) -> i128 {
+        rates::get_group_rate(&env)
+    }
+
+    pub fn get_lock_rate(env: Env, duration_days: u64) -> Result<i128, SavingsError> {
+        rates::get_lock_rate(&env, duration_days)
+    }
+
     // ========== AutoSave Functions ==========
 
     /// Creates a new AutoSave schedule for recurring Flexi deposits
@@ -386,5 +429,8 @@ impl NesteraContract {
 
 #[cfg(test)]
 mod admin_tests;
+#[cfg(test)]
+mod rates_test;
+#[cfg(test)]
 #[cfg(test)]
 mod test;
