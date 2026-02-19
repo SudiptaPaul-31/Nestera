@@ -55,6 +55,65 @@ pub(crate) fn ensure_not_paused(env: &Env) -> Result<(), SavingsError> {
     }
 }
 
+pub(crate) fn calculate_fee(amount: i128, fee_bps: u32) -> i128 {
+    if fee_bps == 0 {
+        0
+    } else {
+        amount.checked_mul(fee_bps as i128).unwrap_or(0) / 10_000
+    }
+}
+
+#[cfg(test)]
+mod fee_tests {
+    use super::calculate_fee;
+
+    #[test]
+    fn test_calculate_fee_zero_bps() {
+        assert_eq!(calculate_fee(10_000, 0), 0);
+        assert_eq!(calculate_fee(1_000_000, 0), 0);
+    }
+
+    #[test]
+    fn test_calculate_fee_basic() {
+        // 10% of 10,000 = 1,000
+        assert_eq!(calculate_fee(10_000, 1_000), 1_000);
+        // 5% of 10,000 = 500
+        assert_eq!(calculate_fee(10_000, 500), 500);
+        // 1% of 10,000 = 100
+        assert_eq!(calculate_fee(10_000, 100), 100);
+    }
+
+    #[test]
+    fn test_calculate_fee_rounds_down() {
+        // 1.25% of 3,333 = 41.6625, should round down to 41
+        assert_eq!(calculate_fee(3_333, 125), 41);
+        // 2.5% of 4,875 = 121.875, should round down to 121
+        assert_eq!(calculate_fee(4_875, 250), 121);
+    }
+
+    #[test]
+    fn test_calculate_fee_small_amounts() {
+        // 1% of 50 = 0.5, should round down to 0
+        assert_eq!(calculate_fee(50, 100), 0);
+        // 1% of 99 = 0.99, should round down to 0
+        assert_eq!(calculate_fee(99, 100), 0);
+        // 1% of 100 = 1
+        assert_eq!(calculate_fee(100, 100), 1);
+    }
+
+    #[test]
+    fn test_calculate_fee_max_bps() {
+        // 100% of 10,000 = 10,000
+        assert_eq!(calculate_fee(10_000, 10_000), 10_000);
+    }
+
+    #[test]
+    fn test_calculate_fee_fractional_bps() {
+        // 0.01% (1 basis point) of 1,000,000 = 100
+        assert_eq!(calculate_fee(1_000_000, 1), 100);
+    }
+}
+
 #[contractimpl]
 impl NesteraContract {
     /// Initialize a new user in the system
@@ -363,6 +422,17 @@ impl NesteraContract {
         Ok(())
     }
 
+    pub fn set_protocol_fee_bps(env: Env, bps: u32) -> Result<(), SavingsError> {
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        admin.require_auth();
+        if bps > 10_000 {
+            return Err(SavingsError::InvalidAmount);
+        }
+        env.storage().instance().set(&DataKey::PlatformFee, &bps);
+        env.events().publish((symbol_short!("set_pfee"),), bps);
+        Ok(())
+    }
+
     pub fn pause(env: Env, admin: Address) -> Result<(), SavingsError> {
         admin.require_auth();
         let stored_admin: Option<Address> = env.storage().instance().get(&DataKey::Admin);
@@ -430,6 +500,13 @@ impl NesteraContract {
 
     pub fn get_fee_recipient(env: Env) -> Option<Address> {
         env.storage().instance().get(&DataKey::FeeRecipient)
+    }
+
+    pub fn get_protocol_fee_bps(env: Env) -> u32 {
+        env.storage()
+            .instance()
+            .get(&DataKey::PlatformFee)
+            .unwrap_or(0)
     }
 
     pub fn get_protocol_fee_balance(env: Env, recipient: Address) -> i128 {
