@@ -25,7 +25,7 @@ pub fn flexi_deposit(env: Env, user: Address, amount: i128) -> Result<(), Saving
         .get(&DataKey::PlatformFee)
         .unwrap_or(0);
 
-    let fee_amount = calculate_fee(amount, fee_bps);
+    let fee_amount = calculate_fee(amount, fee_bps)?;
     let net_amount = amount
         .checked_sub(fee_amount)
         .ok_or(SavingsError::Underflow)?;
@@ -100,7 +100,7 @@ pub fn flexi_withdraw(env: Env, user: Address, amount: i128) -> Result<(), Savin
         .get(&DataKey::PlatformFee)
         .unwrap_or(0);
 
-    let fee_amount = calculate_fee(amount, fee_bps);
+    let fee_amount = calculate_fee(amount, fee_bps)?;
     let _net_amount = amount
         .checked_sub(fee_amount)
         .ok_or(SavingsError::Underflow)?;

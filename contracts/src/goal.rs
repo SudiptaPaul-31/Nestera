@@ -36,7 +36,7 @@ pub fn create_goal_save(
         .get(&DataKey::PlatformFee)
         .unwrap_or(0);
 
-    let fee_amount = calculate_fee(initial_deposit, fee_bps);
+    let fee_amount = calculate_fee(initial_deposit, fee_bps)?;
     let net_initial_deposit = initial_deposit
         .checked_sub(fee_amount)
         .ok_or(SavingsError::Underflow)?;
@@ -124,7 +124,7 @@ pub fn deposit_to_goal_save(
         .get(&DataKey::PlatformFee)
         .unwrap_or(0);
 
-    let fee_amount = calculate_fee(amount, fee_bps);
+    let fee_amount = calculate_fee(amount, fee_bps)?;
     let net_amount = amount
         .checked_sub(fee_amount)
         .ok_or(SavingsError::Underflow)?;
@@ -206,7 +206,7 @@ pub fn withdraw_completed_goal_save(
         .get(&DataKey::PlatformFee)
         .unwrap_or(0);
 
-    let fee_amount = calculate_fee(goal_save.current_amount, fee_bps);
+    let fee_amount = calculate_fee(goal_save.current_amount, fee_bps)?;
     let net_amount = goal_save
         .current_amount
         .checked_sub(fee_amount)

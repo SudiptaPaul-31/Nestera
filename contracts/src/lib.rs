@@ -11,6 +11,8 @@ mod errors;
 mod flexi;
 mod goal;
 mod group;
+mod invariants;
+mod security;
 mod lock;
 mod storage_types;
 mod ttl;
@@ -57,12 +59,19 @@ pub(crate) fn ensure_not_paused(env: &Env) -> Result<(), SavingsError> {
     config::require_not_paused(env)
 }
 
-pub(crate) fn calculate_fee(amount: i128, fee_bps: u32) -> i128 {
+pub(crate) fn calculate_fee(amount: i128, fee_bps: u32) -> Result<i128, SavingsError> {
     if fee_bps == 0 {
-        0
-    } else {
-        amount.checked_mul(fee_bps as i128).unwrap_or(0) / 10_000
+        return Ok(0);
     }
+    // Task 1: Use invariant check for valid fee range
+    invariants::assert_valid_fee(fee_bps)?;
+
+    // Task 4: Proper overflow protection
+    let total = amount
+        .checked_mul(fee_bps as i128)
+        .ok_or(SavingsError::Overflow)?;
+
+    Ok(total / 10_000)
 }
 
 #[cfg(test)]
@@ -71,48 +80,44 @@ mod fee_tests {
 
     #[test]
     fn test_calculate_fee_zero_bps() {
-        assert_eq!(calculate_fee(10_000, 0), 0);
-        assert_eq!(calculate_fee(1_000_000, 0), 0);
+        assert_eq!(calculate_fee(10_000, 0).unwrap(), 0);
+        assert_eq!(calculate_fee(1_000_000, 0).unwrap(), 0);
     }
 
     #[test]
     fn test_calculate_fee_basic() {
-        // 10% of 10,000 = 1,000
-        assert_eq!(calculate_fee(10_000, 1_000), 1_000);
-        // 5% of 10,000 = 500
-        assert_eq!(calculate_fee(10_000, 500), 500);
-        // 1% of 10,000 = 100
-        assert_eq!(calculate_fee(10_000, 100), 100);
+        assert_eq!(calculate_fee(10_000, 1_000).unwrap(), 1_000);
+        assert_eq!(calculate_fee(10_000, 500).unwrap(), 500);
     }
 
     #[test]
     fn test_calculate_fee_rounds_down() {
         // 1.25% of 3,333 = 41.6625, should round down to 41
-        assert_eq!(calculate_fee(3_333, 125), 41);
+        assert_eq!(calculate_fee(3_333, 125).unwrap(), 41);
         // 2.5% of 4,875 = 121.875, should round down to 121
-        assert_eq!(calculate_fee(4_875, 250), 121);
+        assert_eq!(calculate_fee(4_875, 250).unwrap(), 121);
     }
 
     #[test]
     fn test_calculate_fee_small_amounts() {
         // 1% of 50 = 0.5, should round down to 0
-        assert_eq!(calculate_fee(50, 100), 0);
+        assert_eq!(calculate_fee(50, 100).unwrap(), 0);
         // 1% of 99 = 0.99, should round down to 0
-        assert_eq!(calculate_fee(99, 100), 0);
+        assert_eq!(calculate_fee(99, 100).unwrap(), 0);
         // 1% of 100 = 1
-        assert_eq!(calculate_fee(100, 100), 1);
+        assert_eq!(calculate_fee(100, 100).unwrap(), 1);
     }
 
     #[test]
     fn test_calculate_fee_max_bps() {
         // 100% of 10,000 = 10,000
-        assert_eq!(calculate_fee(10_000, 10_000), 10_000);
+        assert_eq!(calculate_fee(10_000, 10_000).unwrap(), 10_000);
     }
 
     #[test]
     fn test_calculate_fee_fractional_bps() {
         // 0.01% (1 basis point) of 1,000,000 = 100
-        assert_eq!(calculate_fee(1_000_000, 1), 100);
+        assert_eq!(calculate_fee(1_000_000, 1).unwrap(), 100);
     }
 }
 
@@ -184,18 +189,33 @@ impl NesteraContract {
         user: Address,
         plan_type: PlanType,
         initial_deposit: i128,
-    ) -> u64 {
-        ensure_not_paused(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+    ) -> Result<u64, SavingsError> {
+        // 1. CHECKS
+        ensure_not_paused(&env)?;
+        invariants::assert_non_negative(initial_deposit)?;
+
         if !Self::is_initialized(env.clone()) {
-            panic_with_error!(&env, ContractError::NotInitialized);
+            return Err(SavingsError::InternalError);
         }
+
         let mut user_data = Self::get_user(env.clone(), user.clone()).unwrap_or(User {
             total_balance: 0,
             savings_count: 0,
         });
-        user_data.savings_count += 1;
-        user_data.total_balance += initial_deposit;
+
+        // 2. EFFECTS (Using Checked Math)
+        user_data.savings_count = user_data
+            .savings_count
+            .checked_add(1)
+            .ok_or(SavingsError::Overflow)?;
+
+        user_data.total_balance = user_data
+            .total_balance
+            .checked_add(initial_deposit)
+            .ok_or(SavingsError::Overflow)?;
+
         let plan_id = user_data.savings_count as u64;
+
         let new_plan = SavingsPlan {
             plan_id,
             plan_type,
@@ -207,17 +227,22 @@ impl NesteraContract {
             is_completed: false,
             is_withdrawn: false,
         };
+
+        // State updates (Effects)
         env.storage()
             .persistent()
             .set(&DataKey::User(user.clone()), &user_data);
         env.storage()
             .persistent()
             .set(&DataKey::SavingsPlan(user.clone(), plan_id), &new_plan);
+
+        // 3. INTERACTIONS (Events)
         env.events().publish(
             (Symbol::new(&env, "create_plan"), user, plan_id),
             initial_deposit,
         );
-        plan_id
+
+        Ok(plan_id)
     }
 
     // --- User & Flexi Logic ---
