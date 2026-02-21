@@ -592,7 +592,9 @@ impl NesteraContract {
         rewards::config::update_rewards_config(&env, admin, config)
     }
 
-    pub fn get_rewards_config(env: Env) -> Result<rewards::storage_types::RewardsConfig, SavingsError> {
+    pub fn get_rewards_config(
+        env: Env,
+    ) -> Result<rewards::storage_types::RewardsConfig, SavingsError> {
         rewards::config::get_rewards_config(&env)
     }
 

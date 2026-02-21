@@ -148,7 +148,11 @@ pub fn award_long_lock_bonus(
 
     add_points(env, user.clone(), bonus_points)?;
     env.events().publish(
-        (Symbol::new(env, "BonusAwarded"), user, symbol_short!("lock")),
+        (
+            Symbol::new(env, "BonusAwarded"),
+            user,
+            symbol_short!("lock"),
+        ),
         bonus_points,
     );
     Ok(bonus_points)
@@ -168,7 +172,11 @@ pub fn award_goal_completion_bonus(env: &Env, user: Address) -> Result<u128, Sav
     let bonus_points = config.goal_completion_bonus as u128;
     add_points(env, user.clone(), bonus_points)?;
     env.events().publish(
-        (Symbol::new(env, "BonusAwarded"), user, symbol_short!("goal")),
+        (
+            Symbol::new(env, "BonusAwarded"),
+            user,
+            symbol_short!("goal"),
+        ),
         bonus_points,
     );
     Ok(bonus_points)

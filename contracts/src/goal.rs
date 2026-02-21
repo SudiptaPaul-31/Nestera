@@ -498,7 +498,12 @@ mod tests {
         setup_rewards_with(client, env, true, 250);
     }
 
-    fn has_bonus_event(env: &Env, user: &Address, reason: soroban_sdk::Symbol, points: u128) -> bool {
+    fn has_bonus_event(
+        env: &Env,
+        user: &Address,
+        reason: soroban_sdk::Symbol,
+        points: u128,
+    ) -> bool {
         let expected_topics =
             (Symbol::new(env, "BonusAwarded"), user.clone(), reason).into_val(env);
         let expected_data = points.into_val(env);
@@ -507,7 +512,9 @@ mod tests {
 
         for i in 0..events.len() {
             if let Some((event_contract, topics, data)) = events.get(i) {
-                if event_contract == contract_id && topics == expected_topics && data == expected_data
+                if event_contract == contract_id
+                    && topics == expected_topics
+                    && data == expected_data
                 {
                     return true;
                 }

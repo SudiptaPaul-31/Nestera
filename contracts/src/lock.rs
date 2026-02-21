@@ -201,7 +201,9 @@ mod tests {
         Address, BytesN, Env, IntoVal, Symbol,
     };
 
-    fn setup_env_with_rewards_enabled(enabled: bool) -> (Env, NesteraContractClient<'static>, Address) {
+    fn setup_env_with_rewards_enabled(
+        enabled: bool,
+    ) -> (Env, NesteraContractClient<'static>, Address) {
         let env = Env::default();
         let contract_id = env.register(NesteraContract, ());
         let client = NesteraContractClient::new(&env, &contract_id);
@@ -227,7 +229,12 @@ mod tests {
         setup_env_with_rewards_enabled(true)
     }
 
-    fn has_bonus_event(env: &Env, user: &Address, reason: soroban_sdk::Symbol, points: u128) -> bool {
+    fn has_bonus_event(
+        env: &Env,
+        user: &Address,
+        reason: soroban_sdk::Symbol,
+        points: u128,
+    ) -> bool {
         let expected_topics =
             (Symbol::new(env, "BonusAwarded"), user.clone(), reason).into_val(env);
         let expected_data = points.into_val(env);
@@ -236,7 +243,9 @@ mod tests {
 
         for i in 0..events.len() {
             if let Some((event_contract, topics, data)) = events.get(i) {
-                if event_contract == contract_id && topics == expected_topics && data == expected_data
+                if event_contract == contract_id
+                    && topics == expected_topics
+                    && data == expected_data
                 {
                     return true;
                 }
