@@ -1,5 +1,6 @@
 @import "tailwindcss";
 
+
 * {
   margin: 0;
   padding: 0;
@@ -23,3 +24,4 @@ button,
 a {
   transition: all 0.3s ease;
 }
+

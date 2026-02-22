@@ -1,8 +1,16 @@
+
+import React from 'react';
+import Hero from '../sections/Hero/Hero';
+import HowItWorks from '../components/HowItWorks';
+import FAQ from '../components/FAQ';
+import Footer from '../components/Footer';
+
 import React from "react";
 import Hero from "../sections/Hero/Hero";
 import SavingsProducts from "../components/SavingsProducts";
 import FAQ from "../components/FAQ";
 import Newsletter from "../components/Newsletter";
+
 
 const LandingPage: React.FC = () => {
   return (
@@ -17,9 +25,15 @@ const LandingPage: React.FC = () => {
         stat={{ label: "Annual Yield", value: "12% APY" }}
       />
 
+      <HowItWorks />
+      <FAQ />
+      <Footer />
+
+
       <SavingsProducts />
       <FAQ />
       <Newsletter />
+
     </main>
   );
 };
